@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Resume Analyzer</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:'Segoe UI',sans-serif;background:#f4f6fb;color:#1a1a1a;min-height:100vh;padding:2rem 1rem}
+    .container{max-width:740px;margin:auto}
+    h1{font-size:26px;font-weight:600;margin-bottom:4px}
+    .subtitle{color:#6b7280;font-size:14px;margin-bottom:1.5rem}
+    .card{background:#fff;border-radius:12px;border:1px solid #e5e7eb;padding:1.5rem;margin-bottom:1rem}
+    .lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#9ca3af;margin-bottom:8px}
+    .role-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1.25rem}
+    .role-btn{border:1px solid #e5e7eb;border-radius:8px;padding:10px 6px;font-size:13px;background:#f9fafb;color:#6b7280;cursor:pointer;text-align:center;transition:all .15s}
+    .role-btn:hover{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8}
+    .role-btn.active{border:2px solid #3b82f6;background:#eff6ff;color:#1d4ed8;font-weight:500}
+    .upload-zone{border:1.5px dashed #d1d5db;border-radius:10px;padding:1.75rem 1rem;text-align:center;cursor:pointer;background:#fafafa;transition:border-color .2s}
+    .upload-zone:hover{border-color:#3b82f6;background:#f0f7ff}
+    .upload-zone p{font-size:13px;color:#6b7280;margin-top:6px}
+    #fileInput{display:none}
+    .file-name{font-size:13px;color:#374151;margin-top:8px;font-weight:500}
+    .btn{width:100%;margin-top:12px;padding:12px;border-radius:8px;border:none;background:#3b82f6;color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:background .2s}
+    .btn:hover{background:#2563eb}
+    .btn:disabled{background:#93c5fd;cursor:not-allowed}
+    .score-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:1rem}
+    .metric{background:#f9fafb;border-radius:8px;padding:.75rem}
+    .metric-lbl{font-size:11px;color:#9ca3af;margin-bottom:3px}
+    .metric-val{font-size:21px;font-weight:600}
+    .green{color:#16a34a}.amber{color:#d97706}.red{color:#dc2626}.blue{color:#2563eb}
+    .progress-bar{height:8px;background:#e5e7eb;border-radius:4px;overflow:hidden;margin-bottom:1.25rem}
+    .progress-fill{height:100%;border-radius:4px;background:#3b82f6;transition:width .7s ease}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem}
+    .pill{display:inline-block;padding:4px 11px;border-radius:999px;font-size:12px;font-weight:500;margin:2px}
+    .pill.found{background:#dcfce7;color:#15803d;border:1px solid #bbf7d0}
+    .pill.missing{background:#fee2e2;color:#b91c1c;border:1px solid #fecaca}
+    .tfidf-wrap{margin:7px 0}
+    .tfidf-row{display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-bottom:3px}
+    .tfidf-track{height:6px;background:#e5e7eb;border-radius:3px;overflow:hidden}
+    .tfidf-fill{height:100%;border-radius:3px;transition:width .5s ease}
+    .entity-pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:12px;margin:2px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd}
+    .suggest-item{display:flex;gap:10px;padding:9px 0;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151;align-items:flex-start}
+    .suggest-item:last-child{border-bottom:none}
+    .dot{width:7px;height:7px;border-radius:50%;background:#3b82f6;margin-top:5px;flex-shrink:0}
+    .legend-row{display:flex;gap:14px;margin-bottom:10px;font-size:12px;color:#6b7280;flex-wrap:wrap}
+    .legend-item{display:flex;align-items:center;gap:5px}
+    .legend-sq{width:10px;height:10px;border-radius:2px}
+    .hidden{display:none}
+    .error-msg{color:#dc2626;font-size:13px;margin-top:8px}
+    @media(max-width:560px){.score-row{grid-template-columns:1fr 1fr}.two-col{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Resume Analyzer</h1>
+  <p class="subtitle">NLP-powered resume scorer using TF-IDF + spaCy — get a real keyword score, not just a checklist</p>
+
+  <div class="card">
+    <div class="lbl">Select job role</div>
+    <div class="role-grid">
+      {% for role in roles %}
+      <div class="role-btn {% if loop.first %}active{% endif %}"
+           onclick="selectRole(this,'{{ role }}')">{{ role }}</div>
+      {% endfor %}
+    </div>
+
+    <div class="lbl">Upload your resume (PDF)</div>
+    <div class="upload-zone" onclick="document.getElementById('fileInput').click()">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none" style="margin:auto;display:block">
+        <circle cx="14" cy="14" r="14" fill="#eff6ff"/>
+        <path d="M14 8v10M10 12l4-4 4 4M7 20h14"
+              stroke="#3b82f6" stroke-width="1.6"
+              stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p><strong style="color:#3b82f6">Click to upload</strong> your PDF resume</p>
+      <input type="file" id="fileInput" accept=".pdf" onchange="onFileSelect(this)"/>
+      <div class="file-name hidden" id="fileName"></div>
+    </div>
+    <p class="error-msg hidden" id="errorMsg"></p>
+    <button class="btn" id="analyzeBtn" onclick="analyzeResume()">
+      Analyze with TF-IDF + spaCy
+    </button>
+  </div>
+
+  <div id="results" class="hidden">
+
+    <div class="card">
+      <div class="lbl">Results — <span id="resultRole"></span></div>
+      <div class="score-row">
+        <div class="metric">
+          <div class="metric-lbl">NLP score</div>
+          <div class="metric-val" id="scoreVal"></div>
+        </div>
+        <div class="metric">
+          <div class="metric-lbl">Skills found</div>
+          <div class="metric-val blue" id="foundCount"></div>
+        </div>
+        <div class="metric">
+          <div class="metric-lbl">Missing</div>
+          <div class="metric-val red" id="missingCount"></div>
+        </div>
+      </div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progressFill" style="width:0%"></div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="lbl">Skills found</div>
+          <div id="foundSkills"></div>
+        </div>
+        <div>
+          <div class="lbl">Missing skills</div>
+          <div id="missingSkills"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="lbl">Skill breakdown</div>
+        <div class="legend-row">
+          <div class="legend-item">
+            <div class="legend-sq" style="background:#16a34a"></div>
+            <span id="foundLegend">Found</span>
+          </div>
+          <div class="legend-item">
+            <div class="legend-sq" style="background:#dc2626"></div>
+            <span id="missingLegend">Missing</span>
+          </div>
+        </div>
+        <div style="position:relative;width:100%;height:190px">
+          <canvas id="pieChart"
+                  role="img"
+                  aria-label="Doughnut chart showing percentage of skills found vs missing">
+            Skills found vs missing percentage chart.
+          </canvas>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="lbl">Top TF-IDF keywords in your resume</div>
+        <div id="tfidfBars"></div>
+      </div>
+    </div>
+
+    <div class="card" id="entityCard">
+      <div class="lbl">spaCy detected entities</div>
+      <div id="entityList"></div>
+      <p style="font-size:11px;color:#9ca3af;margin-top:8px">
+        Technologies, organisations, and tools extracted by spaCy NLP
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="lbl">How to improve your resume</div>
+      <div id="suggestions"></div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+  let selectedRole = document.querySelector('.role-btn.active').textContent.trim();
+  let pieChart = null;
+
+  function selectRole(el, role) {
+    document.querySelectorAll('.role-btn').forEach(b => b.classList.remove('active'));
+    el.classList.add('active');
+    selectedRole = role;
+  }
+
+  function onFileSelect(input) {
+    const file = input.files[0];
+    const el = document.getElementById('fileName');
+    if (file) {
+      el.textContent = file.name;
+      el.classList.remove('hidden');
+    }
+  }
+
+  async function analyzeResume() {
+    const fileInput = document.getElementById('fileInput');
+    const errorMsg  = document.getElementById('errorMsg');
+    const btn       = document.getElementById('analyzeBtn');
+
+    errorMsg.classList.add('hidden');
+
+    if (!fileInput.files[0]) {
+      errorMsg.textContent = 'Please upload a PDF resume first.';
+      errorMsg.classList.remove('hidden');
+      return;
+    }
+
+    btn.disabled    = true;
+    btn.textContent = 'Analyzing...';
+
+    const formData = new FormData();
+    formData.append('resume', fileInput.files[0]);
+    formData.append('role', selectedRole);
+
+    try {
+      const res  = await fetch('/analyze', { method: 'POST', body: formData });
+      const data = await res.json();
+
+      if (data.error) {
+        errorMsg.textContent = data.error;
+        errorMsg.classList.remove('hidden');
+        return;
+      }
+
+      renderResults(data);
+    } catch (e) {
+      errorMsg.textContent = 'Something went wrong. Please try again.';
+      errorMsg.classList.remove('hidden');
+    } finally {
+      btn.disabled    = false;
+      btn.textContent = 'Analyze with TF-IDF + spaCy';
+    }
+  }
+
+  function renderResults(data) {
+    document.getElementById('results').classList.remove('hidden');
+    document.getElementById('resultRole').textContent = data.role;
+
+    const score   = data.nlp_score;
+    const scoreEl = document.getElementById('scoreVal');
+    scoreEl.textContent = score + '%';
+    scoreEl.className   = 'metric-val ' +
+      (score >= 70 ? 'green' : score >= 45 ? 'amber' : 'red');
+
+    document.getElementById('foundCount').textContent =
+      data.found.length + ' / ' + data.total_skills;
+    document.getElementById('missingCount').textContent = data.missing.length;
+
+    setTimeout(() => {
+      document.getElementById('progressFill').style.width = score + '%';
+    }, 100);
+
+    document.getElementById('foundSkills').innerHTML =
+      data.found.map(s => `<span class="pill found">${s}</span>`).join('') ||
+      '<span style="color:#9ca3af;font-size:13px">None found</span>';
+
+    document.getElementById('missingSkills').innerHTML =
+      data.missing.map(s => `<span class="pill missing">${s}</span>`).join('') ||
+      '<span style="color:#16a34a;font-size:13px">All skills matched!</span>';
+
+    renderPieChart(data.found_pct, data.missing_pct);
+    renderTfidfBars(data.tfidf_keywords, data.found);
+    renderEntities(data.spacy_entities);
+    renderSuggestions(data.suggestions);
+
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function renderPieChart(foundPct, missingPct) {
+    document.getElementById('foundLegend').textContent   = 'Found ' + Math.round(foundPct) + '%';
+    document.getElementById('missingLegend').textContent = 'Missing ' + Math.round(missingPct) + '%';
+
+    if (pieChart) pieChart.destroy();
+    pieChart = new Chart(document.getElementById('pieChart'), {
+      type: 'doughnut',
+      data: {
+        labels: ['Skills found', 'Skills missing'],
+        datasets: [{
+          data: [Math.round(foundPct), Math.round(missingPct)],
+          backgroundColor: ['#16a34a', '#dc2626'],
+          borderWidth: 3,
+          borderColor: '#ffffff'
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        cutout: '65%',
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: c => ' ' + c.label + ': ' + Math.round(c.parsed) + '%'
+            }
+          }
+        }
+      }
+    });
+  }
+
+  function renderTfidfBars(keywords, foundSkills) {
+    if (!keywords || !keywords.length) {
+      document.getElementById('tfidfBars').innerHTML =
+        '<p style="font-size:13px;color:#9ca3af">No keywords extracted.</p>';
+      return;
+    }
+    const maxScore = keywords[0].score || 1;
+    document.getElementById('tfidfBars').innerHTML = keywords.map(kw => {
+      const pct   = Math.round((kw.score / maxScore) * 100);
+      const color = foundSkills.includes(kw.word) ? '#16a34a' : '#dc2626';
+      return `
+        <div class="tfidf-wrap">
+          <div class="tfidf-row">
+            <span>${kw.word}</span>
+            <span>${kw.score.toFixed(2)}</span>
+          </div>
+          <div class="tfidf-track">
+            <div class="tfidf-fill" style="width:${pct}%;background:${color}"></div>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  function renderEntities(entities) {
+    const card = document.getElementById('entityCard');
+    if (!entities || !entities.length) {
+      card.classList.add('hidden');
+      return;
+    }
+    card.classList.remove('hidden');
+    document.getElementById('entityList').innerHTML =
+      entities.map(e => `<span class="entity-pill">${e}</span>`).join('');
+  }
+
+  function renderSuggestions(suggestions) {
+    document.getElementById('suggestions').innerHTML =
+      suggestions.map(s =>
+        `<div class="suggest-item">
+           <div class="dot"></div>
+           <div>${s}</div>
+         </div>`
+      ).join('');
+  }
+</script>
+</body>
+</html>
